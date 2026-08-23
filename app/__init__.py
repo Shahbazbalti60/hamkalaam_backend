@@ -37,6 +37,8 @@ def create_app():
     app.register_blueprint(dataset_bp)
     from app.routes.session import session_bp
     app.register_blueprint(session_bp)
+    from app.routes.admin import admin_bp
+    app.register_blueprint(admin_bp)
     # Create all tables
     with app.app_context():
         db.create_all()
