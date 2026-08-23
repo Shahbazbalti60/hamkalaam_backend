@@ -35,6 +35,8 @@ def create_app():
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
     from app.routes.dataset import dataset_bp
     app.register_blueprint(dataset_bp)
+    from app.routes.session import session_bp
+    app.register_blueprint(session_bp)
     # Create all tables
     with app.app_context():
         db.create_all()
