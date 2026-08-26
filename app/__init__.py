@@ -39,6 +39,8 @@ def create_app():
     app.register_blueprint(session_bp)
     from app.routes.admin import admin_bp
     app.register_blueprint(admin_bp)
+    from app.routes.recognition import recognition_bp
+    app.register_blueprint(recognition_bp)
     # Create all tables
     with app.app_context():
         db.create_all()
