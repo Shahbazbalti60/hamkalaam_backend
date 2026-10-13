@@ -11,7 +11,12 @@ Endpoints:
     GET    /api/dataset/words        -> all words + sample counts
     DELETE /api/dataset/word/<id>    -> delete a word (+ its samples)
     GET    /api/dataset/statistics   -> stats for the admin dashboard
+    POST   /api/dataset/word/<id>/sample -> upload one recorded sample video
 """
+
+import os
+import shutil
+import uuid
 
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
@@ -26,6 +31,13 @@ from app.models.user import User, DatasetWord, DatasetSample
 # place to set it, not both, or routes will double up (e.g. /api/dataset/api/dataset/word).
 # This file sets it here; register with app.register_blueprint(dataset_bp) — no url_prefix arg.
 dataset_bp = Blueprint("dataset", __name__, url_prefix="/api/dataset")
+
+# Where recorded sample videos are stored on the server's disk:
+#   <backend root>/uploads/dataset_samples/<word_id>/<random>.webm|mp4
+# (add "uploads/" to .gitignore so videos never end up in git)
+_BACKEND_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+UPLOAD_ROOT = os.path.join(_BACKEND_ROOT, "uploads", "dataset_samples")
+ALLOWED_VIDEO_EXTENSIONS = {"webm", "mp4", "mov", "mkv"}
 
 
 # ─────────────────────────────────────────────────────────────
@@ -172,6 +184,9 @@ def delete_word(word_id):
     db.session.delete(word)
     db.session.commit()
 
+    # Also remove this word's recorded videos from disk.
+    shutil.rmtree(os.path.join(UPLOAD_ROOT, str(word_id)), ignore_errors=True)
+
     return jsonify({"message": f"Word '{word.urdu_word}' and its samples were deleted"}), 200
 
 
@@ -210,3 +225,64 @@ def get_statistics():
         "words_under_target": len(under_target),
         "per_word": per_word,
     }), 200
+
+
+# ─────────────────────────────────────────────────────────────
+# POST /api/dataset/word/<id>/sample   (multipart/form-data)
+# ─────────────────────────────────────────────────────────────
+
+@dataset_bp.route("/word/<int:word_id>/sample", methods=["POST"])
+@jwt_required()
+def upload_sample(word_id):
+    """
+    Receives ONE recorded sign video for a word.
+    Form fields:
+        video            (file, required)  .webm / .mp4 / .mov / .mkv
+        duration_seconds (float, optional)
+        lighting_level   (float, optional)
+    """
+    if err := _require_admin():
+        return err
+
+    user = _current_user()
+    word = db.session.get(DatasetWord, word_id)
+    if word is None:
+        return jsonify({"error": "Word not found"}), 404
+
+    file = request.files.get("video")
+    if file is None or not file.filename:
+        return jsonify({"error": "No video file was sent"}), 400
+
+    ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else ""
+    if ext not in ALLOWED_VIDEO_EXTENSIONS:
+        return jsonify({
+            "error": "Unsupported video type",
+            "allowed": sorted(ALLOWED_VIDEO_EXTENSIONS),
+        }), 400
+
+    word_dir = os.path.join(UPLOAD_ROOT, str(word.id))
+    os.makedirs(word_dir, exist_ok=True)
+
+    stored_name = f"{uuid.uuid4().hex}.{ext}"
+    file.save(os.path.join(word_dir, stored_name))
+
+    sample = DatasetSample(
+        word_id=word.id,
+        # stored relative to the backend root so it is portable
+        file_path=f"uploads/dataset_samples/{word.id}/{stored_name}",
+        duration_seconds=request.form.get("duration_seconds", type=float),
+        signer_id=user.id if user else None,
+        lighting_level=request.form.get("lighting_level", type=float),
+    )
+    db.session.add(sample)
+    db.session.flush()
+
+    live_count = DatasetSample.query.filter_by(word_id=word.id).count()
+    word.sample_count = live_count
+    db.session.commit()
+
+    return jsonify({
+        "message": "Sample saved",
+        "sample_id": sample.id,
+        "sample_count": live_count,
+    }), 201

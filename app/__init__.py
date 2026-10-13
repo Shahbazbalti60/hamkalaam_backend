@@ -43,6 +43,8 @@ def create_app():
     app.register_blueprint(recognition_bp)
     from app.routes.audio import audio_bp
     app.register_blueprint(audio_bp)
+    from app.routes.account import account_bp
+    app.register_blueprint(account_bp)
     # Create all tables
     with app.app_context():
         db.create_all()
