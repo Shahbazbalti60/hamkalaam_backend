@@ -26,6 +26,7 @@ from marshmallow import Schema, fields, ValidationError, validate
 from app.ai.gesture_classifier import GestureClassifier
 from app.ai.expression_classifier import ExpressionClassifier
 from app.ai.sentence_synthesiser import SentenceSynthesiser
+from app.ai.sequence_classifier import SequenceClassifier, ModelUnavailable
 
 recognition_bp = Blueprint("recognition", __name__, url_prefix="/api/recognition")
 
@@ -35,6 +36,7 @@ recognition_bp = Blueprint("recognition", __name__, url_prefix="/api/recognition
 _gesture_classifier = GestureClassifier()
 _expression_classifier = ExpressionClassifier()
 _sentence_synthesiser = SentenceSynthesiser()
+_sequence_classifier = SequenceClassifier()   # real trained model, loaded on first use
 
 
 # ─────────────────────────────────────────────────────────────
@@ -107,3 +109,51 @@ def generate():
     )
 
     return jsonify({"urdu_sentence": sentence}), 200
+
+
+# ─────────────────────────────────────────────────────────────
+# REAL model: one signing window (about 60 frames) -> a word
+# ─────────────────────────────────────────────────────────────
+
+class SequenceSchema(Schema):
+    # ~60 frames, each frame = 126 numbers (2 hands x 21 points x x,y,z).
+    # Any length from 5 to 300 frames is accepted; the server resamples to 60.
+    frames = fields.List(
+        fields.List(fields.Float(), validate=validate.Length(equal=126)),
+        required=True,
+        validate=validate.Length(min=5, max=300),
+    )
+
+
+sequence_schema = SequenceSchema()
+
+
+@recognition_bp.route("/model-status", methods=["GET"])
+@jwt_required()
+def model_status():
+    """Loads the model (first call takes a few seconds) so the app can
+    preload it when the recognition screen opens."""
+    try:
+        _sequence_classifier.load()
+    except ModelUnavailable as exc:
+        return jsonify({"ready": False, "reason": str(exc)}), 200
+    return jsonify({"ready": True, "word_count": len(_sequence_classifier.words)}), 200
+
+
+@recognition_bp.route("/classify-sequence", methods=["POST"])
+@jwt_required()
+def classify_sequence():
+    json_data = request.get_json(silent=True) or {}
+    try:
+        data = sequence_schema.load(json_data)
+    except ValidationError as e:
+        return jsonify({"error": "Validation failed", "details": e.messages}), 400
+
+    try:
+        result = _sequence_classifier.predict(data["frames"])
+    except ModelUnavailable as exc:
+        return jsonify({"error": str(exc)}), 503
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    return jsonify(result), 200
