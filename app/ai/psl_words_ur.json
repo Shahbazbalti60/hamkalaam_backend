@@ -1,0 +1,428 @@
+[
+ {
+  "label": "absolutely",
+  "urdu": "بالکل",
+  "domain": "Other",
+  "verified": false
+ },
+ {
+  "label": "aircrash",
+  "urdu": "طیارہ حادثہ",
+  "domain": "Other",
+  "verified": false
+ },
+ {
+  "label": "airplane",
+  "urdu": "ہوائی جہاز",
+  "domain": "Other",
+  "verified": false
+ },
+ {
+  "label": "all",
+  "urdu": "سب",
+  "domain": "Other",
+  "verified": false
+ },
+ {
+  "label": "also",
+  "urdu": "بھی",
+  "domain": "Other",
+  "verified": false
+ },
+ {
+  "label": "arrival",
+  "urdu": "آمد",
+  "domain": "Other",
+  "verified": false
+ },
+ {
+  "label": "assalam-o-alaikum",
+  "urdu": "السلام علیکم",
+  "domain": "Greetings",
+  "verified": false
+ },
+ {
+  "label": "atm",
+  "urdu": "اے ٹی ایم",
+  "domain": "Daily Needs",
+  "verified": false
+ },
+ {
+  "label": "bald",
+  "urdu": "گنجا",
+  "domain": "Healthcare",
+  "verified": false
+ },
+ {
+  "label": "beach",
+  "urdu": "ساحل",
+  "domain": "Other",
+  "verified": false
+ },
+ {
+  "label": "beak",
+  "urdu": "چونچ",
+  "domain": "Other",
+  "verified": false
+ },
+ {
+  "label": "bear",
+  "urdu": "ریچھ",
+  "domain": "Other",
+  "verified": false
+ },
+ {
+  "label": "beard",
+  "urdu": "داڑھی",
+  "domain": "Healthcare",
+  "verified": false
+ },
+ {
+  "label": "bed",
+  "urdu": "بستر",
+  "domain": "Daily Needs",
+  "verified": false
+ },
+ {
+  "label": "bench",
+  "urdu": "بینچ",
+  "domain": "Daily Needs",
+  "verified": false
+ },
+ {
+  "label": "bicycle",
+  "urdu": "سائیکل",
+  "domain": "Daily Needs",
+  "verified": false
+ },
+ {
+  "label": "both",
+  "urdu": "دونوں",
+  "domain": "Other",
+  "verified": false
+ },
+ {
+  "label": "bridge",
+  "urdu": "پل",
+  "domain": "Other",
+  "verified": false
+ },
+ {
+  "label": "bring",
+  "urdu": "لاؤ",
+  "domain": "Daily Needs",
+  "verified": false
+ },
+ {
+  "label": "bulb",
+  "urdu": "بلب",
+  "domain": "Daily Needs",
+  "verified": false
+ },
+ {
+  "label": "cartoon",
+  "urdu": "کارٹون",
+  "domain": "Other",
+  "verified": false
+ },
+ {
+  "label": "chimpanzee",
+  "urdu": "چمپینزی",
+  "domain": "Other",
+  "verified": false
+ },
+ {
+  "label": "color_pencils",
+  "urdu": "رنگین پنسلیں",
+  "domain": "Education",
+  "verified": false
+ },
+ {
+  "label": "cow",
+  "urdu": "گائے",
+  "domain": "Other",
+  "verified": false
+ },
+ {
+  "label": "crow",
+  "urdu": "کوا",
+  "domain": "Other",
+  "verified": false
+ },
+ {
+  "label": "cupboard",
+  "urdu": "الماری",
+  "domain": "Daily Needs",
+  "verified": false
+ },
+ {
+  "label": "deer",
+  "urdu": "ہرن",
+  "domain": "Other",
+  "verified": false
+ },
+ {
+  "label": "doctor",
+  "urdu": "ڈاکٹر",
+  "domain": "Healthcare",
+  "verified": false
+ },
+ {
+  "label": "dog",
+  "urdu": "کتا",
+  "domain": "Other",
+  "verified": false
+ },
+ {
+  "label": "donttouch",
+  "urdu": "ہاتھ مت لگائیں",
+  "domain": "Other",
+  "verified": false
+ },
+ {
+  "label": "door",
+  "urdu": "دروازہ",
+  "domain": "Daily Needs",
+  "verified": false
+ },
+ {
+  "label": "elephant",
+  "urdu": "ہاتھی",
+  "domain": "Other",
+  "verified": false
+ },
+ {
+  "label": "excuseme",
+  "urdu": "معاف کیجیے",
+  "domain": "Greetings",
+  "verified": false
+ },
+ {
+  "label": "facelotion",
+  "urdu": "فیس لوشن",
+  "domain": "Healthcare",
+  "verified": false
+ },
+ {
+  "label": "fan",
+  "urdu": "پنکھا",
+  "domain": "Daily Needs",
+  "verified": false
+ },
+ {
+  "label": "garden",
+  "urdu": "باغ",
+  "domain": "Other",
+  "verified": false
+ },
+ {
+  "label": "generator",
+  "urdu": "جنریٹر",
+  "domain": "Daily Needs",
+  "verified": false
+ },
+ {
+  "label": "goodbye",
+  "urdu": "خدا حافظ",
+  "domain": "Greetings",
+  "verified": false
+ },
+ {
+  "label": "goodmorning",
+  "urdu": "صبح بخیر",
+  "domain": "Greetings",
+  "verified": false
+ },
+ {
+  "label": "have_a_good_day",
+  "urdu": "آپ کا دن اچھا گزرے",
+  "domain": "Greetings",
+  "verified": false
+ },
+ {
+  "label": "hello",
+  "urdu": "ہیلو",
+  "domain": "Greetings",
+  "verified": false
+ },
+ {
+  "label": "help",
+  "urdu": "مدد",
+  "domain": "Healthcare",
+  "verified": false
+ },
+ {
+  "label": "hungry",
+  "urdu": "بھوک",
+  "domain": "Daily Needs",
+  "verified": false
+ },
+ {
+  "label": "ihaveacomplaint",
+  "urdu": "مجھے شکایت ہے",
+  "domain": "Other",
+  "verified": false
+ },
+ {
+  "label": "left_hand",
+  "urdu": "بایاں ہاتھ",
+  "domain": "Healthcare",
+  "verified": false
+ },
+ {
+  "label": "lifejacket",
+  "urdu": "لائف جیکٹ",
+  "domain": "Other",
+  "verified": false
+ },
+ {
+  "label": "mine",
+  "urdu": "میرا",
+  "domain": "Other",
+  "verified": false
+ },
+ {
+  "label": "mobile_phone",
+  "urdu": "موبائل فون",
+  "domain": "Daily Needs",
+  "verified": false
+ },
+ {
+  "label": "nailcutter",
+  "urdu": "ناخن تراش",
+  "domain": "Healthcare",
+  "verified": false
+ },
+ {
+  "label": "need",
+  "urdu": "ضرورت",
+  "domain": "Daily Needs",
+  "verified": false
+ },
+ {
+  "label": "nothing",
+  "urdu": "کچھ نہیں",
+  "domain": "Other",
+  "verified": false
+ },
+ {
+  "label": "peacock",
+  "urdu": "مور",
+  "domain": "Other",
+  "verified": false
+ },
+ {
+  "label": "policecar",
+  "urdu": "پولیس کی گاڑی",
+  "domain": "Other",
+  "verified": false
+ },
+ {
+  "label": "razor",
+  "urdu": "ریزر",
+  "domain": "Healthcare",
+  "verified": false
+ },
+ {
+  "label": "shampoo",
+  "urdu": "شیمپو",
+  "domain": "Healthcare",
+  "verified": false
+ },
+ {
+  "label": "shower",
+  "urdu": "شاور",
+  "domain": "Healthcare",
+  "verified": false
+ },
+ {
+  "label": "sunglasses",
+  "urdu": "دھوپ کا چشمہ",
+  "domain": "Daily Needs",
+  "verified": false
+ },
+ {
+  "label": "thankyou",
+  "urdu": "شکریہ",
+  "domain": "Greetings",
+  "verified": false
+ },
+ {
+  "label": "tissue",
+  "urdu": "ٹشو",
+  "domain": "Healthcare",
+  "verified": false
+ },
+ {
+  "label": "toothbrush",
+  "urdu": "ٹوتھ برش",
+  "domain": "Healthcare",
+  "verified": false
+ },
+ {
+  "label": "toothpaste",
+  "urdu": "ٹوتھ پیسٹ",
+  "domain": "Healthcare",
+  "verified": false
+ },
+ {
+  "label": "umbrella",
+  "urdu": "چھتری",
+  "domain": "Daily Needs",
+  "verified": false
+ },
+ {
+  "label": "water",
+  "urdu": "پانی",
+  "domain": "Daily Needs",
+  "verified": false
+ },
+ {
+  "label": "we",
+  "urdu": "ہم",
+  "domain": "Other",
+  "verified": false
+ },
+ {
+  "label": "welldone",
+  "urdu": "شاباش",
+  "domain": "Greetings",
+  "verified": false
+ },
+ {
+  "label": "where",
+  "urdu": "کہاں",
+  "domain": "Other",
+  "verified": false
+ },
+ {
+  "label": "who",
+  "urdu": "کون",
+  "domain": "Other",
+  "verified": false
+ },
+ {
+  "label": "you",
+  "urdu": "آپ",
+  "domain": "Other",
+  "verified": false
+ },
+ {
+  "label": "come",
+  "urdu": "آؤ",
+  "domain": "Other",
+  "verified": false
+ },
+ {
+  "label": "give",
+  "urdu": "دو",
+  "domain": "Daily Needs",
+  "verified": false
+ },
+ {
+  "label": "want",
+  "urdu": "چاہیے",
+  "domain": "Daily Needs",
+  "verified": false
+ }
+]

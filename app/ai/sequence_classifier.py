@@ -36,7 +36,7 @@ class ModelUnavailable(Exception):
 
 class SequenceClassifier:
     SEQ_LEN = 60
-    MIN_HANDS_RATIO = 0.15      # fewer frames than this with a hand -> "no hand"
+    MIN_HANDS_RATIO = 0.03      # fewer frames than this with a hand -> "no hand"
     CONFIDENT = 0.50            # below this the answer is flagged "uncertain"
 
     def __init__(self, model_dir=None):
