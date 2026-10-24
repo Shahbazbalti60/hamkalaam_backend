@@ -1,37 +1,30 @@
+# -*- coding: utf-8 -*-
 """
 app/ai/sentence_synthesiser.py
 
-DUMMY / RULE-BASED PLACEHOLDER — Phase 4.
+Turns the recognised PSL word labels (e.g. ["water", "want"]) plus the
+facial-expression context into an Urdu sentence.
 
-Real pipeline (Phase 6) trains an LSTM with beam search over word
-sequences to produce grammatically natural Urdu sentences. This
-placeholder just joins words with a couple of simple pattern rules
-so the /generate endpoint has a realistic-shaped response to test
-against while the real model doesn't exist yet.
+Day 4: now backed by the rule-based engine in sentence_engine.py
+(tested by test_sentence_engine.py). The class name and the generate()
+signature are unchanged, so routes/recognition.py needs no edit.
+A learned LSTM sequence-to-sequence model can replace the engine later
+without touching the route.
 """
+from app.ai import sentence_engine
 
 
 class SentenceSynthesiser:
-    """Dummy LSTM stand-in. Replace with a real trained
-    sequence-to-sequence model in Phase 6."""
+    """Word labels + expression context -> Urdu sentence."""
 
     def generate(self, word_sequence, expression_context=None):
         """
         Args:
-            word_sequence: list[str] — Urdu words in signed order.
-            expression_context: str | None — e.g. 'Question', 'Happy'.
+            word_sequence: list[str] - PSL word labels in signed order
+                (the labels the classifier returns, e.g. "water").
+            expression_context: str | None - 'Question', 'Negation', ...
 
         Returns:
-            urdu_sentence: str
+            urdu_sentence: str ("" if word_sequence is empty)
         """
-        if not word_sequence:
-            return ""
-
-        joined = " ".join(word_sequence)
-
-        if expression_context == "Question":
-            return f"کیا {joined}؟"
-        if expression_context == "Negation":
-            return f"{joined} نہیں۔"
-
-        return f"{joined}۔"
+        return sentence_engine.generate(word_sequence, expression_context)
