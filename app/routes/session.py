@@ -44,6 +44,12 @@ def _is_admin(user):
     return (user.role or "").lower() == "admin"
 
 
+def _iso(dt):
+    """UTC datetime -> ISO string with a trailing 'Z', so the app knows it is
+    UTC and can show it in the phone's own time zone."""
+    return dt.isoformat() + "Z" if dt else None
+
+
 def _serialize_sentence(s):
     return {
         "id": s.id,
@@ -51,7 +57,7 @@ def _serialize_sentence(s):
         "urdu_sentence": s.urdu_sentence,
         "word_sequence": s.word_sequence,
         "expression_context": s.expression_context,
-        "generated_at": s.generated_at.isoformat() if s.generated_at else None,
+        "generated_at": _iso(s.generated_at),
     }
 
 
@@ -59,8 +65,8 @@ def _serialize_session(sess, include_sentences=True):
     data = {
         "id": sess.id,
         "user_id": sess.user_id,
-        "started_at": sess.started_at.isoformat() if sess.started_at else None,
-        "ended_at": sess.ended_at.isoformat() if sess.ended_at else None,
+        "started_at": _iso(sess.started_at),
+        "ended_at": _iso(sess.ended_at),
     }
     if include_sentences:
         data["sentences"] = [_serialize_sentence(s) for s in sess.sentences]
