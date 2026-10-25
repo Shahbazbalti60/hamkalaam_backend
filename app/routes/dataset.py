@@ -12,6 +12,9 @@ Endpoints:
     DELETE /api/dataset/word/<id>    -> delete a word (+ its samples)
     GET    /api/dataset/statistics   -> stats for the admin dashboard
     POST   /api/dataset/word/<id>/sample -> upload one recorded sample video
+    PUT    /api/dataset/word/<id>    -> edit a word (Urdu text / gloss / domain)
+    GET    /api/dataset/word/<id>/samples -> list the samples of one word
+    DELETE /api/dataset/sample/<id>  -> delete one sample (record + video file)
 """
 
 import os
@@ -64,6 +67,11 @@ def _require_admin():
     if (user.role or "").lower() != "admin":
         return jsonify({"error": "Admin access required"}), 403
     return None
+
+
+def _iso(dt):
+    """UTC datetime -> ISO string ending in 'Z' (the app converts to local time)."""
+    return dt.isoformat() + "Z" if dt else None
 
 
 # ─────────────────────────────────────────────────────────────
@@ -286,3 +294,118 @@ def upload_sample(word_id):
         "sample_id": sample.id,
         "sample_count": live_count,
     }), 201
+
+
+# ─────────────────────────────────────────────────────────────
+# PUT /api/dataset/word/<id>   (edit a word)
+# ─────────────────────────────────────────────────────────────
+
+@dataset_bp.route("/word/<int:word_id>", methods=["PUT"])
+@jwt_required()
+def update_word(word_id):
+    if err := _require_admin():
+        return err
+
+    word = db.session.get(DatasetWord, word_id)
+    if word is None:
+        return jsonify({"error": "Word not found"}), 404
+
+    json_data = request.get_json(silent=True) or {}
+    try:
+        data = word_schema.load(json_data, partial=True)
+    except ValidationError as e:
+        return jsonify({"error": "Validation failed", "details": e.messages}), 400
+
+    new_urdu = data.get("urdu_word")
+    if new_urdu is not None and new_urdu != word.urdu_word:
+        clash = DatasetWord.query.filter_by(urdu_word=new_urdu).first()
+        if clash and clash.id != word.id:
+            return jsonify({"error": "Another word already uses this Urdu text"}), 409
+        word.urdu_word = new_urdu
+    if "english_gloss" in data:
+        word.english_gloss = data["english_gloss"]
+    if "domain" in data:
+        word.domain = data["domain"]
+
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({"error": "Another word already uses this Urdu text"}), 409
+
+    return jsonify({
+        "message": "Word updated",
+        "word": {
+            "id": word.id,
+            "urdu_word": word.urdu_word,
+            "english_gloss": word.english_gloss,
+            "domain": word.domain,
+        },
+    }), 200
+
+
+# ─────────────────────────────────────────────────────────────
+# GET /api/dataset/word/<id>/samples
+# ─────────────────────────────────────────────────────────────
+
+@dataset_bp.route("/word/<int:word_id>/samples", methods=["GET"])
+@jwt_required()
+def list_samples(word_id):
+    if err := _require_admin():
+        return err
+
+    word = db.session.get(DatasetWord, word_id)
+    if word is None:
+        return jsonify({"error": "Word not found"}), 404
+
+    samples = DatasetSample.query.filter_by(word_id=word.id).order_by(DatasetSample.id.asc()).all()
+    result = []
+    for s in samples:
+        captured = getattr(s, "captured_at", None) or getattr(s, "created_at", None)
+        result.append({
+            "id": s.id,
+            "file_path": s.file_path,
+            "duration_seconds": s.duration_seconds,
+            "lighting_level": s.lighting_level,
+            "signer_id": s.signer_id,
+            "captured_at": _iso(captured),
+        })
+    return jsonify({"samples": result, "total": len(result)}), 200
+
+
+# ─────────────────────────────────────────────────────────────
+# DELETE /api/dataset/sample/<id>
+# ─────────────────────────────────────────────────────────────
+
+@dataset_bp.route("/sample/<int:sample_id>", methods=["DELETE"])
+@jwt_required()
+def delete_sample(sample_id):
+    if err := _require_admin():
+        return err
+
+    sample = db.session.get(DatasetSample, sample_id)
+    if sample is None:
+        return jsonify({"error": "Sample not found"}), 404
+
+    word_id = sample.word_id
+    file_path = sample.file_path
+
+    db.session.delete(sample)
+    db.session.flush()
+
+    live_count = DatasetSample.query.filter_by(word_id=word_id).count()
+    word = db.session.get(DatasetWord, word_id)
+    if word is not None:
+        word.sample_count = live_count
+    db.session.commit()
+
+    # Remove the video file from disk (only inside the uploads folder).
+    if file_path:
+        full = os.path.abspath(os.path.join(_BACKEND_ROOT, file_path))
+        if full.startswith(os.path.abspath(UPLOAD_ROOT)) and os.path.isfile(full):
+            try:
+                os.remove(full)
+            except OSError:
+                pass
+
+    return jsonify({"message": "Sample deleted", "sample_count": live_count}), 200
