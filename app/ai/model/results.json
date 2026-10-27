@@ -1,0 +1,9 @@
+{
+ "lstm_main_test_acc": 0.9981006383895874,
+ "lstm_top3": 0.9990503191947937,
+ "rf_main_test_acc": 0.9886039886039886,
+ "lstm_cross_device_acc": 0.8682295680046082,
+ "rf_cross_device_acc": 0.8746968472109944,
+ "acc_with_swapped_slots": 0.9981006647673314,
+ "acc_with_mirrored_video": 0.9952516619183286
+}
