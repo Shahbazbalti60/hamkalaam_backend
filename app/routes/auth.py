@@ -5,6 +5,9 @@ from flask_jwt_extended import (
 )
 from app import db, bcrypt
 from app.models.user import User, UserProfile, TokenBlacklist
+from app.routes.account import (
+    verification_required, is_unverified, issue_verification_code,
+)
 from datetime import datetime
 
 auth_bp = Blueprint('auth', __name__)
@@ -37,6 +40,17 @@ def register():
     db.session.add(profile)
     db.session.commit()
 
+    # FR-02: when REQUIRE_EMAIL_VERIFICATION=true the account stays
+    # unverified until the e-mailed 6-digit code is entered.
+    if verification_required():
+        email_sent = issue_verification_code(user)
+        return jsonify({
+            'message': 'Account created. Enter the 6-digit code we sent to verify your e-mail.',
+            'verification_required': True,
+            'email': user.email,
+            'email_sent': email_sent,
+        }), 201
+
     return jsonify({'message': 'Account created successfully'}), 201
 
 # ── Login ──────────────────────────────────────────────────
@@ -56,6 +70,15 @@ def login():
 
     if not user.is_active:
         return jsonify({'message': 'Please verify your email first'}), 403
+
+    # Checked AFTER the password, so this cannot be used to find out
+    # which e-mails exist.
+    if is_unverified(user):
+        return jsonify({
+            'message': 'Please verify your email first',
+            'verification_required': True,
+            'email': user.email,
+        }), 403
 
     access_token = create_access_token(
         identity=str(user.id),
