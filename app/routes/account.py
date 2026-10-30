@@ -27,15 +27,18 @@ to send real e-mails.
 
 import os
 import random
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
-from flask import Blueprint, request, jsonify
-from flask_jwt_extended import jwt_required, get_jwt_identity, create_access_token
+from flask import Blueprint, Response, request, jsonify
+from flask_jwt_extended import (
+    jwt_required, get_jwt_identity, get_jwt, create_access_token,
+    verify_jwt_in_request,
+)
 from flask_mail import Message
 from marshmallow import Schema, fields, ValidationError, validate
 
 from app import db, bcrypt, mail
-from app.models.user import User
+from app.models.user import User, UserProfile
 
 account_bp = Blueprint("account", __name__, url_prefix="/api/auth")
 
@@ -76,6 +79,17 @@ class EmailVerificationCode(db.Model):
     attempts = db.Column(db.Integer, default=0)
     used = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class TokenRevocation(db.Model):
+    """Every login token of this user issued BEFORE `revoked_before` is
+    refused (set when the password is reset - SRDS FR-06)."""
+    __tablename__ = "token_revocations"
+
+    user_id = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    revoked_before = db.Column(db.DateTime, nullable=False)
 
 
 class UnverifiedUser(db.Model):
@@ -131,9 +145,190 @@ def _find_user(email):
     return User.query.filter(db.func.lower(User.email) == email.lower()).first()
 
 
+def revoke_all_tokens(user_id):
+    """Cancels every access/refresh token issued to this user so far.
+    (Call before db.session.commit().)"""
+    now = datetime.utcnow()
+    rec = db.session.get(TokenRevocation, user_id)
+    if rec is None:
+        db.session.add(TokenRevocation(user_id=user_id, revoked_before=now))
+    else:
+        rec.revoked_before = now
+
+
+@account_bp.before_app_request
+def _reject_revoked_tokens():
+    """Runs before every request. If the request carries a login token that
+    was issued before the user's password was reset, answer 401 so the app
+    sends the person back to the login screen."""
+    if request.method == "OPTIONS":
+        return None
+    if not request.headers.get("Authorization", "").startswith("Bearer "):
+        return None
+    try:
+        verify_jwt_in_request(optional=True)
+        claims = get_jwt()
+        identity = get_jwt_identity()
+        if not claims or identity is None:
+            return None
+        record = db.session.get(TokenRevocation, int(identity))
+    except Exception:
+        return None  # invalid/expired tokens are handled by the route itself
+    if record is None or claims.get("iat") is None:
+        return None
+    cutoff = record.revoked_before.replace(tzinfo=timezone.utc).timestamp()
+    if claims["iat"] < cutoff:
+        return jsonify({"msg": "Token has been revoked. Please log in again."}), 401
+    return None
+
+
 # ─────────────────────────────────────────────────────────────
 # 1) Token renewal
 # ─────────────────────────────────────────────────────────────
+
+# ─────────────────────────────────────────────────────────────
+# 1b) Profile extras: photo and Urdu voice dialect (FR-07)
+#     (the name is edited through the existing PUT /api/auth/profile)
+# ─────────────────────────────────────────────────────────────
+
+DIALECTS = ("Standard", "Punjabi")  # Standard Urdu / Punjabi-accented Urdu
+PHOTO_MAX_BYTES = 2 * 1024 * 1024    # 2 MB
+_BACKEND_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+PHOTO_DIR = os.path.join(_BACKEND_ROOT, "uploads", "profile_photos")
+
+
+def _sniff_image(data):
+    """'png' / 'jpg' from the file's first bytes (never trust the file name)."""
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "png"
+    if data[:3] == b"\xff\xd8\xff":
+        return "jpg"
+    return None
+
+
+def _profile_for(user):
+    profile = user.profile
+    if profile is None:
+        profile = UserProfile(user_id=user.id, display_name=user.name)
+        db.session.add(profile)
+        db.session.flush()
+    return profile
+
+
+def _photo_file(profile):
+    """Absolute path of the stored photo, or None. Only files inside the
+    profile_photos folder are ever served."""
+    if not profile or not profile.profile_photo:
+        return None
+    full = os.path.abspath(os.path.join(_BACKEND_ROOT, profile.profile_photo))
+    if not full.startswith(os.path.abspath(PHOTO_DIR) + os.sep) or not os.path.isfile(full):
+        return None
+    return full
+
+
+def _remove_photo_files(user_id):
+    for ext in ("png", "jpg"):
+        path = os.path.join(PHOTO_DIR, f"user_{user_id}.{ext}")
+        if os.path.isfile(path):
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+
+
+@account_bp.route("/profile/extra", methods=["GET"])
+@jwt_required()
+def profile_extra():
+    user = db.session.get(User, int(get_jwt_identity()))
+    if user is None:
+        return jsonify({"error": "User not found"}), 404
+    profile = user.profile
+    return jsonify({
+        "urdu_dialect": (profile.urdu_dialect if profile and profile.urdu_dialect else "Standard"),
+        "has_photo": _photo_file(profile) is not None,
+    }), 200
+
+
+class DialectSchema(Schema):
+    urdu_dialect = fields.Str(required=True, validate=validate.OneOf(DIALECTS))
+
+
+@account_bp.route("/profile/dialect", methods=["PUT"])
+@jwt_required()
+def set_dialect():
+    user = db.session.get(User, int(get_jwt_identity()))
+    if user is None:
+        return jsonify({"error": "User not found"}), 404
+    try:
+        data = DialectSchema().load(request.get_json(silent=True) or {})
+    except ValidationError as e:
+        return jsonify({"error": "Validation failed", "details": e.messages}), 400
+
+    profile = _profile_for(user)
+    profile.urdu_dialect = data["urdu_dialect"]
+    profile.updated_at = datetime.utcnow()
+    db.session.commit()
+    return jsonify({"message": "Dialect saved", "urdu_dialect": profile.urdu_dialect}), 200
+
+
+@account_bp.route("/profile/photo", methods=["POST"])
+@jwt_required()
+def upload_photo():
+    user = db.session.get(User, int(get_jwt_identity()))
+    if user is None:
+        return jsonify({"error": "User not found"}), 404
+
+    file = request.files.get("photo")
+    if file is None:
+        return jsonify({"error": "No photo was sent"}), 400
+
+    data = file.read(PHOTO_MAX_BYTES + 1)
+    if len(data) > PHOTO_MAX_BYTES:
+        return jsonify({"error": "Photo must be 2 MB or smaller"}), 413
+    kind = _sniff_image(data)
+    if kind is None:
+        return jsonify({"error": "Only JPEG or PNG photos are allowed"}), 400
+
+    os.makedirs(PHOTO_DIR, exist_ok=True)
+    _remove_photo_files(user.id)  # one photo per user
+    with open(os.path.join(PHOTO_DIR, f"user_{user.id}.{kind}"), "wb") as out:
+        out.write(data)
+
+    profile = _profile_for(user)
+    profile.profile_photo = f"uploads/profile_photos/user_{user.id}.{kind}"
+    profile.updated_at = datetime.utcnow()
+    db.session.commit()
+    return jsonify({"message": "Photo saved"}), 201
+
+
+@account_bp.route("/profile/photo", methods=["GET"])
+@jwt_required()
+def get_photo():
+    user = db.session.get(User, int(get_jwt_identity()))
+    if user is None:
+        return jsonify({"error": "User not found"}), 404
+    path = _photo_file(user.profile)
+    if path is None:
+        return jsonify({"error": "No photo"}), 404
+    with open(path, "rb") as f:
+        body = f.read()
+    mimetype = "image/png" if path.endswith(".png") else "image/jpeg"
+    return Response(body, mimetype=mimetype, headers={"Cache-Control": "no-store"})
+
+
+@account_bp.route("/profile/photo", methods=["DELETE"])
+@jwt_required()
+def delete_photo():
+    user = db.session.get(User, int(get_jwt_identity()))
+    if user is None:
+        return jsonify({"error": "User not found"}), 404
+    _remove_photo_files(user.id)
+    if user.profile is not None:
+        user.profile.profile_photo = None
+        user.profile.updated_at = datetime.utcnow()
+    db.session.commit()
+    return jsonify({"message": "Photo removed"}), 200
+
 
 @account_bp.route("/renew", methods=["POST"])
 @jwt_required()
@@ -248,6 +443,7 @@ def reset_password():
 
     user.password_hash = bcrypt.generate_password_hash(data["new_password"]).decode("utf-8")
     record.used = True
+    revoke_all_tokens(user.id)  # FR-06: older logins stop working
     db.session.commit()
 
     return jsonify({"message": "Password updated. You can now log in."}), 200
