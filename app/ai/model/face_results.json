@@ -1,0 +1,17 @@
+{
+ "face_test_acc_all": 0.6038216560509554,
+ "face_test_acc_public": 0.6038216560509554,
+ "face_test_acc_own": null,
+ "face_train_frames": 6279,
+ "face_own_frames": 0,
+ "face_public_frames": 7849,
+ "face_classes": [
+  "Question",
+  "Negation",
+  "Affirmation",
+  "Neutral",
+  "Happy",
+  "Sad"
+ ],
+ "face_note": "Question/Negation public data are emotion proxies (surprise, angry+disgust); Affirmation is own recordings only."
+}

@@ -11,11 +11,15 @@ Endpoints:
     GET /api/admin/system-stats       -> counts, 7-day activity, top words, health
     GET /api/admin/model-status       -> recognition model details
     POST /api/admin/model/reload      -> reload the model from disk
+    POST   /api/admin/expression-samples          -> save face vectors for training
+    GET    /api/admin/expression-samples/summary  -> how many per class
+    DELETE /api/admin/expression-samples/<label>  -> remove one class' samples
 """
 
 import importlib.util
 import json
 import os
+import threading
 from collections import Counter
 from datetime import datetime, timedelta
 
@@ -325,7 +329,26 @@ def model_status():
         except Exception:
             parameters = None
 
+    # Facial-expression model (SRDS FR-21): present only after the face patch
+    face = None
+    try:
+        from app.routes.recognition import _face_classifier as fc
+        face_results = None
+        rp = os.path.join(fc._model_dir, "face_results.json")
+        if os.path.isfile(rp) and os.path.getsize(rp) < 100_000:
+            with open(rp, "r", encoding="utf-8") as f:
+                face_results = json.load(f)
+        face = {
+            "trained": bool(fc.files_present()),
+            "loaded": bool(fc.is_loaded),
+            "classes": fc.classes,
+            "results": face_results,
+        }
+    except Exception:
+        face = None
+
     return jsonify({
+        "face": face,
         "loaded": bool(clf.is_loaded),
         "model_file": model_file,
         "labels_found": os.path.isfile(labels_path),
@@ -375,3 +398,110 @@ def model_reload():
         "loaded": True,
         "word_count": len(clf.words),
     }), 200
+
+
+# ─────────────────────────────────────────────────────────────
+# Facial-expression training samples (SRDS FR-20 / FR-21)
+# Admins record themselves making each expression; the app sends the
+# 68 face landmarks (136 numbers per frame). They are appended to
+#   uploads/expression_samples/samples.jsonl
+# and used by the Colab notebook to train the expression CNN.
+# ─────────────────────────────────────────────────────────────
+
+EXPRESSION_CLASSES = ["Question", "Negation", "Affirmation", "Neutral", "Happy", "Sad"]
+_BACKEND_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+EXPRESSION_DIR = os.path.join(_BACKEND_ROOT, "uploads", "expression_samples")
+EXPRESSION_FILE = os.path.join(EXPRESSION_DIR, "samples.jsonl")
+_expr_lock = threading.Lock()
+MAX_VECTORS_PER_UPLOAD = 60
+
+
+def _expression_counts():
+    counts = {c: 0 for c in EXPRESSION_CLASSES}
+    recs = {c: set() for c in EXPRESSION_CLASSES}
+    if os.path.isfile(EXPRESSION_FILE):
+        with open(EXPRESSION_FILE, "r", encoding="utf-8") as f:
+            for line in f:
+                try:
+                    row = json.loads(line)
+                except ValueError:
+                    continue
+                label = row.get("label")
+                if label in counts:
+                    counts[label] += 1
+                    recs[label].add(row.get("rec"))
+    return counts, {c: len(v) for c, v in recs.items()}
+
+
+@admin_bp.route("/expression-samples", methods=["POST"])
+@jwt_required()
+def save_expression_samples():
+    if err := _require_admin():
+        return err
+
+    data = request.get_json(silent=True) or {}
+    label = data.get("label")
+    vectors = data.get("vectors")
+    rec_id = str(data.get("rec_id") or "")[:64]
+    if label not in EXPRESSION_CLASSES:
+        return jsonify({"error": f"label must be one of {EXPRESSION_CLASSES}"}), 400
+    if not isinstance(vectors, list) or not (1 <= len(vectors) <= MAX_VECTORS_PER_UPLOAD):
+        return jsonify({"error": f"send 1 to {MAX_VECTORS_PER_UPLOAD} face vectors"}), 400
+
+    clean = []
+    for v in vectors:
+        if (not isinstance(v, list) or len(v) != 136
+                or not all(isinstance(x, (int, float)) and abs(x) < 1e6 for x in v)):
+            return jsonify({"error": "each face vector must be 136 numbers"}), 400
+        clean.append([round(float(x), 2) for x in v])
+
+    user = _current_user()
+    os.makedirs(EXPRESSION_DIR, exist_ok=True)
+    stamp = datetime.utcnow().isoformat() + "Z"
+    with _expr_lock:
+        with open(EXPRESSION_FILE, "a", encoding="utf-8") as f:
+            for v in clean:
+                f.write(json.dumps({
+                    "label": label, "rec": rec_id, "signer": user.id if user else None,
+                    "t": stamp, "points": v,
+                }) + "\n")
+        counts, recs = _expression_counts()
+    return jsonify({"saved": len(clean), "counts": counts, "recordings": recs}), 201
+
+
+@admin_bp.route("/expression-samples/summary", methods=["GET"])
+@jwt_required()
+def expression_samples_summary():
+    if err := _require_admin():
+        return err
+    with _expr_lock:
+        counts, recs = _expression_counts()
+    return jsonify({"counts": counts, "recordings": recs,
+                    "total": sum(counts.values()),
+                    "file": "uploads/expression_samples/samples.jsonl"}), 200
+
+
+@admin_bp.route("/expression-samples/<label>", methods=["DELETE"])
+@jwt_required()
+def delete_expression_class(label):
+    if err := _require_admin():
+        return err
+    if label not in EXPRESSION_CLASSES:
+        return jsonify({"error": "Unknown class"}), 404
+    removed = 0
+    with _expr_lock:
+        if os.path.isfile(EXPRESSION_FILE):
+            kept = []
+            with open(EXPRESSION_FILE, "r", encoding="utf-8") as f:
+                for line in f:
+                    try:
+                        if json.loads(line).get("label") == label:
+                            removed += 1
+                            continue
+                    except ValueError:
+                        pass
+                    kept.append(line)
+            with open(EXPRESSION_FILE, "w", encoding="utf-8") as f:
+                f.writelines(kept)
+        counts, recs = _expression_counts()
+    return jsonify({"removed": removed, "counts": counts, "recordings": recs}), 200

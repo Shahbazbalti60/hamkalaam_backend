@@ -1,0 +1,12 @@
+{
+ "classes": [
+  "Question",
+  "Negation",
+  "Affirmation",
+  "Neutral",
+  "Happy",
+  "Sad"
+ ],
+ "landmarks": 68,
+ "input": "68x2 normalised (face_landmarks.normalize_face)"
+}

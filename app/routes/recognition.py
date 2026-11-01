@@ -157,3 +157,36 @@ def classify_sequence():
         return jsonify({"error": str(exc)}), 400
 
     return jsonify(result), 200
+
+
+# ---- face expression (SRDS FR-20 to FR-22) ----
+from app.ai.face_classifier import FaceClassifier, FaceModelUnavailable
+
+_face_classifier = FaceClassifier()
+
+
+@recognition_bp.route("/expression", methods=["POST"])
+@jwt_required()
+def classify_expression():
+    json_data = request.get_json(silent=True) or {}
+    vectors = json_data.get("landmarks")
+    try:
+        results = _face_classifier.predict(vectors)
+    except FaceModelUnavailable as exc:
+        return jsonify({"error": str(exc), "model_ready": False}), 503
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"results": results, "model_ready": True}), 200
+
+
+@recognition_bp.route("/expression-status", methods=["GET"])
+@jwt_required()
+def expression_status():
+    if not _face_classifier.is_loaded:
+        if not _face_classifier.files_present():
+            return jsonify({"ready": False, "reason": "not_trained"}), 200
+        try:
+            _face_classifier.load()
+        except FaceModelUnavailable as exc:
+            return jsonify({"ready": False, "reason": str(exc)}), 200
+    return jsonify({"ready": True, "classes": _face_classifier.classes}), 200
