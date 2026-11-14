@@ -26,7 +26,6 @@ from marshmallow import Schema, fields, ValidationError, validate
 from app.ai.gesture_classifier import GestureClassifier
 from app.ai.expression_classifier import ExpressionClassifier
 from app.ai.sentence_synthesiser import SentenceSynthesiser
-from app.ai.sequence_classifier import SequenceClassifier, ModelUnavailable
 
 recognition_bp = Blueprint("recognition", __name__, url_prefix="/api/recognition")
 
@@ -36,7 +35,9 @@ recognition_bp = Blueprint("recognition", __name__, url_prefix="/api/recognition
 _gesture_classifier = GestureClassifier()
 _expression_classifier = ExpressionClassifier()
 _sentence_synthesiser = SentenceSynthesiser()
-_sequence_classifier = SequenceClassifier()   # real trained model, loaded on first use
+from app.ai.forest_classifier import ModelUnavailable
+from app.ai.word_classifier import build_word_classifier
+_sequence_classifier = build_word_classifier()   # real trained model, loaded on first use
 
 
 # ─────────────────────────────────────────────────────────────

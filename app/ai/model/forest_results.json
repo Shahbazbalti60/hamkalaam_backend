@@ -1,0 +1,9 @@
+{
+ "forest_main_test_acc": 0.99002849002849,
+ "forest_top3": 0.9985754985754985,
+ "forest_cross_device_acc": 0.9005658852061439,
+ "forest_trees": 200,
+ "forest_file_mb": 6.1,
+ "forest_clips": 7018,
+ "forest_sklearn": "1.6.1"
+}

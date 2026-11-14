@@ -285,16 +285,17 @@ def model_status():
     if err := _require_admin():
         return err
 
-    from app.ai import sequence_classifier as sc
+    from app.ai import forest_classifier as fm
     try:
         clf = _get_classifier()
     except Exception as exc:
         return jsonify({"error": f"Recognition module not available: {exc}"}), 503
 
     model_dir = clf._model_dir
-    model_path = os.path.join(model_dir, sc.MODEL_FILE)
-    labels_path = os.path.join(model_dir, sc.LABELS_FILE)
-    results_path = os.path.join(model_dir, "results.json")
+    model_name = getattr(clf, "MODEL_FILE", fm.MODEL_FILE)
+    labels_name = getattr(clf, "LABELS_FILE", fm.LABELS_FILE)
+    model_path = os.path.join(model_dir, model_name)
+    labels_path = os.path.join(model_dir, labels_name)
 
     words = []
     if os.path.isfile(labels_path):
@@ -308,19 +309,25 @@ def model_status():
     if os.path.isfile(model_path):
         st = os.stat(model_path)
         model_file = {
-            "name": sc.MODEL_FILE,
+            "name": model_name,
             "size_mb": round(st.st_size / (1024 * 1024), 2),
             "modified_at": _iso(datetime.utcfromtimestamp(st.st_mtime)),
         }
 
-    # Optional: results.json (accuracy numbers saved by the Colab notebook)
-    results = None
-    if os.path.isfile(results_path) and os.path.getsize(results_path) < 100_000:
-        try:
-            with open(results_path, "r", encoding="utf-8") as f:
-                results = json.load(f)
-        except Exception:
-            results = None
+    # Optional: accuracy numbers saved by the Colab notebooks
+    # (results.json = comparison numbers from the earlier experiments, forest_results.json = the Random Forest)
+    results = {}
+    for fname in ("results.json", "forest_results.json"):
+        rpath = os.path.join(model_dir, fname)
+        if os.path.isfile(rpath) and os.path.getsize(rpath) < 100_000:
+            try:
+                with open(rpath, "r", encoding="utf-8") as f:
+                    part = json.load(f)
+                if isinstance(part, dict):
+                    results.update(part)
+            except Exception:
+                pass
+    results = results or None
 
     parameters = None
     if clf.is_loaded:
@@ -349,6 +356,8 @@ def model_status():
 
     return jsonify({
         "face": face,
+        "kind": getattr(clf, "KIND", "forest"),
+        "description": getattr(clf, "DESCRIPTION", "Random Forest on clip features (SRDS word classifier)"),
         "loaded": bool(clf.is_loaded),
         "model_file": model_file,
         "labels_found": os.path.isfile(labels_path),
@@ -371,18 +380,18 @@ def model_status():
 @jwt_required()
 def model_reload():
     """Loads the model files from disk again (e.g. after copying a newly
-    trained psl_lstm.keras). The running model is kept if loading fails."""
+    trained psl_forest.joblib). The running model is kept if loading fails."""
     if err := _require_admin():
         return err
 
-    from app.ai.sequence_classifier import SequenceClassifier, ModelUnavailable
+    from app.ai.forest_classifier import ModelUnavailable
     try:
         clf = _get_classifier()
     except Exception as exc:
         return jsonify({"error": f"Recognition module not available: {exc}"}), 503
 
     try:
-        fresh = SequenceClassifier(model_dir=clf._model_dir)
+        fresh = type(clf)(model_dir=clf._model_dir)   # the same kind of model as the active one
         fresh.load()
     except ModelUnavailable as exc:
         return jsonify({"error": str(exc)}), 503
@@ -392,6 +401,7 @@ def model_reload():
     with clf._lock:
         clf._model = fresh._model
         clf._words = fresh._words
+        clf.CONFIDENT = fresh.CONFIDENT   # the limit measured in training travels with the model
 
     return jsonify({
         "message": "Model reloaded",

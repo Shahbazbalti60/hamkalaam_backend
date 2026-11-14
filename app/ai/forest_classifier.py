@@ -1,18 +1,16 @@
+# -*- coding: utf-8 -*-
 """
-app/ai/sequence_classifier.py
+app/ai/forest_classifier.py   (SRDS: Random Forest word classifier)
 
-Real word recogniser (trained in Google Colab on the SignSpeak PSL
-landmark dataset, Apache-2.0, Sherwani et al.).
+The word recogniser of the app. Its answer has this shape:
 
-Input : one signing window = ~60 frames x 126 numbers
-        (2 hand blocks x 21 points x x,y,z, exactly like the dataset)
-Output: best word + confidence + top-3 list
+    predict(frames) -> {"word", "confidence", "top3", "hands_found", "uncertain", "reason"}
 
-The same hand_tidy.py used for training prepares the numbers, so live
-camera data and training data are treated identically.
+Files (made by the forest training notebook, copied into app/ai/model/):
+    psl_forest.joblib      the trained forest
+    forest_labels.json     {"words": [...], "confident": 0.xx}
 
-TensorFlow is imported only when the model is first needed, so Flask
-still starts quickly (and still starts at all) if TensorFlow is missing.
+scikit-learn is imported only when the model is first needed.
 """
 import json
 import os
@@ -22,22 +20,29 @@ import numpy as np
 
 try:
     from .hand_tidy import tidy_hands
+    from .forest_features import clip_features
 except ImportError:                      # plain-script use / tests
     from hand_tidy import tidy_hands
+    from forest_features import clip_features
 
 MODEL_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "model")
-MODEL_FILE = "psl_lstm.keras"
-LABELS_FILE = "labels.json"
+MODEL_FILE = "psl_forest.joblib"
+LABELS_FILE = "forest_labels.json"
+RESULTS_FILE = "forest_results.json"
 
 
 class ModelUnavailable(Exception):
-    """TensorFlow or the model files are missing."""
+    """scikit-learn or the forest files are missing."""
 
 
-class SequenceClassifier:
+class ForestSequenceClassifier:
+    KIND = "forest"
+    MODEL_FILE = MODEL_FILE
+    LABELS_FILE = LABELS_FILE
+    DESCRIPTION = "Random Forest on clip features (SRDS word classifier)"
     SEQ_LEN = 60
-    MIN_HANDS_RATIO = 0.03      # fewer frames than this with a hand -> "no hand"
-    CONFIDENT = 0.50            # below this the answer is flagged "uncertain"
+    MIN_HANDS_RATIO = 0.03
+    CONFIDENT = 0.30          # replaced by the value measured in training (forest_labels.json)
 
     def __init__(self, model_dir=None):
         self._model_dir = model_dir or MODEL_DIR
@@ -45,13 +50,15 @@ class SequenceClassifier:
         self._words = None
         self._lock = threading.Lock()
 
-    # ---------------------------------------------------------- loading
     @property
     def is_loaded(self):
         return self._model is not None
 
+    @property
+    def words(self):
+        return list(self._words or [])
+
     def load(self):
-        """Load the model once (safe to call many times)."""
         if self._model is not None:
             return
         with self._lock:
@@ -61,27 +68,26 @@ class SequenceClassifier:
             labels_path = os.path.join(self._model_dir, LABELS_FILE)
             if not (os.path.exists(model_path) and os.path.exists(labels_path)):
                 raise ModelUnavailable(
-                    f"Model files not found in {self._model_dir} "
-                    f"(need {MODEL_FILE} and {LABELS_FILE})."
-                )
+                    f"Random Forest files not found in {self._model_dir} "
+                    f"(need {MODEL_FILE} and {LABELS_FILE}).")
             try:
-                from tensorflow import keras
+                import joblib
             except ImportError as exc:
                 raise ModelUnavailable(
-                    "TensorFlow is not installed in this environment "
-                    "(run: pip install tensorflow)."
-                ) from exc
-            model = keras.models.load_model(model_path)
+                    "scikit-learn is not installed (run: pip install scikit-learn).") from exc
+            try:
+                model = joblib.load(model_path)
+            except Exception as exc:
+                raise ModelUnavailable(
+                    f"The forest file could not be loaded ({exc}). Install the same "
+                    "scikit-learn version that was used for training.") from exc
             with open(labels_path, "r", encoding="utf-8") as f:
-                words = json.load(f)["words"]
-            self._words = words
+                info = json.load(f)
+            self._words = info["words"]
+            if isinstance(info.get("confident"), (int, float)):
+                self.CONFIDENT = float(info["confident"])
             self._model = model
 
-    @property
-    def words(self):
-        return list(self._words or [])
-
-    # ---------------------------------------------------------- predict
     def predict(self, frames):
         arr = np.asarray(frames, dtype=np.float32)
         if arr.ndim != 2 or arr.shape[1] != 126 or arr.shape[0] < 5:
@@ -89,7 +95,6 @@ class SequenceClassifier:
         if not np.isfinite(arr).all():
             raise ValueError("frames contain invalid numbers")
 
-        # Any length is accepted: stretch / squeeze to exactly 60 frames.
         if arr.shape[0] != self.SEQ_LEN:
             idx = np.round(np.linspace(0, arr.shape[0] - 1, self.SEQ_LEN)).astype(int)
             arr = arr[idx]
@@ -100,12 +105,14 @@ class SequenceClassifier:
                     "hands_found": hands_found, "uncertain": True, "reason": "no_hand"}
 
         self.load()
-        feats = tidy_hands(arr)[None]
-        with self._lock:                                  # one prediction at a time
-            probs = self._model.predict(feats, verbose=0)[0]
+        row = clip_features(tidy_hands(arr))[None]
+        with self._lock:
+            probs = self._model.predict_proba(row)[0]
+            classes = np.asarray(self._model.classes_, dtype=int)
 
         order = np.argsort(probs)[::-1][:3]
-        top3 = [{"word": self._words[i], "confidence": round(float(probs[i]), 4)} for i in order]
+        top3 = [{"word": self._words[int(classes[i])], "confidence": round(float(probs[i]), 4)}
+                for i in order]
         best = top3[0]
         return {"word": best["word"], "confidence": best["confidence"], "top3": top3,
                 "hands_found": round(hands_found, 3),

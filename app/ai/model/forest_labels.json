@@ -72,6 +72,5 @@
   "who",
   "you"
  ],
- "seq_len": 60,
- "features": 132
+ "confident": 0.42
 }
