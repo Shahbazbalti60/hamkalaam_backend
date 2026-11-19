@@ -1,9 +1,12 @@
 {
- "forest_main_test_acc": 0.99002849002849,
- "forest_top3": 0.9985754985754985,
- "forest_cross_device_acc": 0.9005658852061439,
- "forest_trees": 200,
- "forest_file_mb": 6.1,
- "forest_clips": 7018,
+ "forest_main_test_acc": 1.0,
+ "forest_top3": 1.0,
+ "forest_cross_device_acc": 0.9622641509433962,
+ "forest_trees": 300,
+ "forest_file_mb": 2.0,
+ "forest_clips": 1492,
+ "demo_words": 16,
+ "forest_plain_acc": 0.9966555183946488,
+ "aug_copies": 4,
  "forest_sklearn": "1.6.1"
 }
